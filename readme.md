@@ -1,6 +1,7 @@
 # Next Parser
 
 ⚠️This project is in very early development⚠️
+
 ⚠️So this readme will for now explain how I'm tackling this pretty tideous task⚠️
 
 ## Idea
@@ -15,14 +16,30 @@ This will allow better performance as well as more readability in general.
 
 ## Logic
 
-The parser will be divided into two categories : The actual ast-builder and the lexer
+The parser will be divided into two categories : 
+- The ast-builder
+- The lexer
 
-The lexer transforms a string into a list of tokens and the ast-builder will take these tokens and transform them into a list of instructions
+The lexer transforms a string into a list of tokens ❕ and the ast-builder will take these tokens and transform them into a list of instructions 🏗️
 
 Right now how I've been working on it, I plan on making the project "rule based" 📕
 
 #### What does that even mean ?
 
-In my logic "rule based" means that the parser will be fed "rules" that are then checked on a list of tokens. 
+In my logic "rule based" means that the parser will be fed "rules" that are then mapped on a list of tokens. 
 
 These tokens will be matched onto different patterns to build an ast from the tokens fed into it.
+
+A little schema to explain :
+
+    Numbers Rule :
+    -> Digit:* dot Digit:*
+    | dot Digit:*
+    | Digit:*
+
+    Tokens ( as a list )
+    1, 5, ., 8, 6, 7 // Will match
+    ., 8, 7, 3 // Will match
+    1, 5, 4 // Will match
+    . // Won't match
+    
