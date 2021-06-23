@@ -1,126 +1,168 @@
 package main
 
-import "fmt"
-
-var (
-	Tokens = []string{"(", ")", "dig", "."}
+import (
+	"fmt"
+	"strconv"
+	"strings"
 )
 
 const (
-	lparen = 0
-	rparen = 1
-	digit  = 2
-	dot    = 3
-
 	or       = 0
 	multiple = 1
+	and      = 2
 )
-
-type Token struct {
-	Type  int
-	Value string
-	start int
-	end   int
-}
-
-func token(_type int, value string, start int, end int) Token {
-	return Token{_type, value, start, end}
-}
-
-func TK(_type int) Token {
-	return Token{_type, "0", 0, 0}
-}
 
 type Rule struct {
 	Raw      bool
 	Type     int
 	Subrules []Rule
+	Callback func(interface{}) interface{}
+}
+
+func def(interface{}) interface{} {
+	return ""
 }
 
 func rawRule(_type int) Rule {
-	return Rule{true, _type, []Rule{}}
+	return Rule{true, _type, []Rule{}, def}
 }
 
 func rule(_type int, rules []Rule) Rule {
-	return Rule{false, _type, rules}
+	return Rule{false, _type, rules, def}
 }
 
-func consume_ruleset_token(ruleset []Rule, tokens []Token) (int, bool) {
-	matches := false
+func rule_cb(_type int, rules []Rule, callback func(interface{}) interface{}) Rule {
+	return Rule{false, _type, rules, callback}
+}
+
+func tokens_to_strings(tokens []Token) string {
+	res := ""
+
+	for _, token := range tokens {
+		res += token.Value
+	}
+
+	return res
+}
+
+type Literal struct {
+	valueType string
+	raw       string
+	value     interface{}
+}
+
+func literal_str(value string) Literal {
+	return Literal{"string", value, 0}
+}
+
+func literal_num(value string) Literal {
+	num, _ := strconv.ParseFloat(value, 64)
+	return Literal{"string", "", num}
+}
+
+func crt(ruleset []Rule) (int, bool, []interface{}) {
 	breakPoint := 0
+	atLeastMatch := false
+	final := []interface{}{}
 
-	x := 0
+	tk_IDX := 0
 
-	fmt.Println(">> Entering with the ruleset :", ruleset)
-	fmt.Println(">> Entering with the tokens :", tokens)
+	for _, rule := range ruleset {
+		matches := false
+		var toCompare Token
 
-	for i, rule := range ruleset {
-		fmt.Println("[", i, "]", "[", x, "]")
-		breakPoint = i
-		compare := tokens[x]
-
-		if rule.Raw == true {
-			fmt.Println("[Raw] with the rule being :", Tokens[rule.Type], "and the compared :", Tokens[compare.Type])
-			x += 1
-			matches = rule.Type == compare.Type
-		} else {
-			switch rule.Type {
-			case or:
-				break
-			case multiple:
-				fmt.Println("[SubRule] Multiple x:", x)
-				running := true
-				fbp := 0
-				bp := x
-
-				for running == true {
-					_breakPoint, match := consume_ruleset_token(rule.Subrules, tokens[bp:])
-					running = match
-					bp += _breakPoint
-					fbp += _breakPoint
-					fmt.Print("|", _breakPoint, "|")
-				}
-
-				fmt.Print("\n", fbp)
-
-				matches = (fbp != 0)
-
-				x += fbp
-				breakPoint += fbp
-
-				fmt.Println("[Mutiple : Finished executing, current token idx:", x, ", current rule idx:", i)
-				fmt.Println("[Mutiple : did it match?", matches)
-				fmt.Println("[Mutiple : first break point", fbp)
-				break
+		if rule.Raw {
+			matches, toCompare = compareNext(rule.Type)
+			fmt.Println("Val :", toCompare.Value, matches)
+			fmt.Println(toCompare)
+			if matches {
+				final = append(final, toCompare.Value)
 			}
+			tk_IDX += 1
+		} else {
+			consume_type(rule.Type, rule)
 		}
 
+		breakPoint = tk_IDX
 		if !matches {
-			fmt.Println(">> Exit because not matching.", matches)
-			fmt.Println("[Exit]", x, i)
+			fmt.Printf("Unexpected token '%s' at column %d, expected : '%s' \n", toCompare.Value, toCompare.start, Tokens[rule.Type])
+			fmt.Println("no match")
 			break
 		}
-
-	}
-	if len(ruleset) == 1 && matches {
-		breakPoint = 1
 	}
 
-	fmt.Println(">> Exit")
-	fmt.Println(x, len(ruleset))
-	return breakPoint, matches
+	if breakPoint > 0 {
+		atLeastMatch = true
+	}
+
+	return breakPoint, atLeastMatch, final
+}
+
+func consume(rootRule Rule) interface{} {
+	if rootRule.Raw {
+
+		_, matches, final := crt(rootRule.Subrules)
+		if matches {
+			return rootRule.Callback(final)
+		} else {
+			return ""
+		}
+	} else {
+		final := consume_type(rootRule.Type, rootRule)
+		return final
+	}
+}
+
+func consume_type(_type int, rootRule Rule) interface{} {
+	switch _type {
+	case multiple:
+		x := 0
+		running := true
+		final := []interface{}{}
+
+		for running {
+			bp, matches, _final := crt(rootRule.Subrules)
+			final = append(final, _final...)
+			running = matches
+			x += bp
+		}
+		return rootRule.Callback(final)
+	case or:
+		break
+	case and:
+		_, _, final := crt(rootRule.Subrules)
+		return rootRule.Callback(final)
+		break
+	}
+	return ""
+}
+
+func interfaces_to_str(i interface{}) string {
+	fn := []string{}
+
+	for _, arg := range i.([]interface{}) {
+		fn = append(fn, arg.(string))
+	}
+
+	return strings.Join(fn, "")
 }
 
 func main() {
-	//expression := [] Rule{rawRule(lparen), rawRule(rparen)}
-	//toMatch := [] Token{token(lparen, "(", 0, 0), token(rparen, ")", 1, 1)}
+	initMap()
+	ToParse = "  1247854567"
 
-	multipleDigits := rule(multiple, []Rule{rawRule(digit)})
+	expression := []Rule{rawRule(number)}
 
-	toTest := []Token{TK(digit), TK(digit), TK(dot), TK(digit), TK(digit), TK(dot)}
-	number := []Rule{multipleDigits, rawRule(dot), multipleDigits}
+	exp := rule_cb(and, expression, func(args interface{}) interface{} {
+		fmt.Println(literal_num(interfaces_to_str(args)))
+		return literal_num(interfaces_to_str(args))
+	})
 
-	breakPoint, matches := consume_ruleset_token(number, toTest)
+	//toMatch := []Token{token(number, "1", 0, 0), token(number, "7", 1, 1)}
 
-	fmt.Println("[Result] Does match ?", matches, ", breakPoint :", breakPoint)
+	final := consume(exp)
+
+	fmt.Println("Final number:", final)
+
+	//fmt.Println("Lexed :", lex("1247854567"))
 }
