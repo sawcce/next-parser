@@ -6,10 +6,16 @@ import (
 )
 
 const (
-	lparen        = 0
-	rparen        = 1
-	number        = 2
-	dot           = 3
+	// Punctuation
+	lparen = 0
+	rparen = 1
+	dot    = 2
+
+	// Native Data Types
+	number = 10
+	str    = 11
+
+	//
 	eof           = 100
 	notRecognized = 150
 )
@@ -20,7 +26,7 @@ var (
 )
 
 var (
-	Tokens = []string{"(", ")", "dig", "."}
+	Tokens map[int]string = make(map[int]string)
 
 	Matches map[int]string = make(map[int]string)
 )
@@ -28,8 +34,17 @@ var (
 func initMap() {
 	Matches[lparen] = "\\("
 	Matches[rparen] = "\\)"
-	Matches[number] = `([1-9]\d*(\.\d*[1-9])?|0\.\d*[1-9]+)|\d+(\.\d*[1-9])?`
 	Matches[dot] = "\\."
+
+	Matches[number] = `([1-9]\d*(\.\d*[1-9])?|0\.\d*[1-9]+)|\d+(\.\d*[1-9])?`
+	Matches[str] = `\".*?\"`
+
+	Tokens[lparen] = "("
+	Tokens[rparen] = ")"
+	Tokens[dot] = "."
+
+	Tokens[number] = `a number`
+	Tokens[str] = `a "String"`
 }
 
 type Token struct {
@@ -66,7 +81,7 @@ func compareNext(expected int) (bool, Token) {
 		currentIndex += l[1]
 		return true, token(expected, match, currentIndex+l[0], currentIndex+l[1])
 	} else {
-		return false, TK(eof)
+		return false, token(eof, s[:l[0]], currentIndex, currentIndex)
 	}
 }
 

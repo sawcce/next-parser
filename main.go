@@ -57,13 +57,14 @@ func literal_str(value string) Literal {
 
 func literal_num(value string) Literal {
 	num, _ := strconv.ParseFloat(value, 64)
-	return Literal{"string", "", num}
+	return Literal{"Number", "", num}
 }
 
-func crt(ruleset []Rule) (int, bool, []interface{}) {
+func crt(ruleset []Rule) (int, bool, []interface{}, string) {
 	breakPoint := 0
-	atLeastMatch := false
+	atLeastMatch := true
 	final := []interface{}{}
+	err := ""
 
 	tk_IDX := 0
 
@@ -72,7 +73,8 @@ func crt(ruleset []Rule) (int, bool, []interface{}) {
 		var toCompare Token
 
 		if rule.Raw {
-			matches, toCompare = compareNext(rule.Type)
+			_matches, toCompare := compareNext(rule.Type)
+			matches = _matches
 			fmt.Println("Val :", toCompare.Value, matches)
 			fmt.Println(toCompare)
 			if matches {
@@ -85,35 +87,40 @@ func crt(ruleset []Rule) (int, bool, []interface{}) {
 
 		breakPoint = tk_IDX
 		if !matches {
-			fmt.Printf("Unexpected token '%s' at column %d, expected : '%s' \n", toCompare.Value, toCompare.start, Tokens[rule.Type])
+			atLeastMatch = false
+			err = fmt.Sprintf("Unexpected token '%s' at column %d, expected : '%s' \n", toCompare.Value, toCompare.start, Tokens[rule.Type])
 			fmt.Println("no match")
 			break
 		}
 	}
 
-	if breakPoint > 0 {
-		atLeastMatch = true
-	}
+	//if breakPoint > 0 {
+	//	fmt.Println(breakPoint)
+	//	atLeastMatch = true
+	//}
 
-	return breakPoint, atLeastMatch, final
+	return breakPoint, atLeastMatch, final, err
 }
 
-func consume(rootRule Rule) interface{} {
+func consume(rootRule Rule) (interface{}, string) {
+	var err string
 	if rootRule.Raw {
 
-		_, matches, final := crt(rootRule.Subrules)
+		_, matches, final, _err := crt(rootRule.Subrules)
+		err = _err
 		if matches {
-			return rootRule.Callback(final)
+			return rootRule.Callback(final), err
 		} else {
-			return ""
+			return "", err
 		}
 	} else {
-		final := consume_type(rootRule.Type, rootRule)
-		return final
+		final, _err := consume_type(rootRule.Type, rootRule)
+		return final, _err
 	}
 }
 
-func consume_type(_type int, rootRule Rule) interface{} {
+func consume_type(_type int, rootRule Rule) (interface{}, string) {
+	var err string
 	switch _type {
 	case multiple:
 		x := 0
@@ -121,20 +128,39 @@ func consume_type(_type int, rootRule Rule) interface{} {
 		final := []interface{}{}
 
 		for running {
-			bp, matches, _final := crt(rootRule.Subrules)
+			bp, matches, _final, _err := crt(rootRule.Subrules)
 			final = append(final, _final...)
 			running = matches
 			x += bp
+			err = _err
 		}
-		return rootRule.Callback(final)
+		return rootRule.Callback(final), err
 	case or:
+		match := false
+		final := []interface{}{}
+		tempErr := ""
+
+		for _, rule := range rootRule.Subrules {
+			_, matches, _final, _err := crt([]Rule{rule})
+			fmt.Println("Rule :", rule, "Match", matches)
+			match = matches
+			tempErr = _err
+			if match {
+				final = append(final, _final...)
+				break
+			}
+		}
+		if !match {
+			err = tempErr
+		}
+		return rootRule.Callback(final), err
 		break
 	case and:
-		_, _, final := crt(rootRule.Subrules)
-		return rootRule.Callback(final)
+		_, _, final, err := crt(rootRule.Subrules)
+		return rootRule.Callback(final), err
 		break
 	}
-	return ""
+	return "", err
 }
 
 func interfaces_to_str(i interface{}) string {
@@ -149,20 +175,20 @@ func interfaces_to_str(i interface{}) string {
 
 func main() {
 	initMap()
-	ToParse = "  1247854567"
 
-	expression := []Rule{rawRule(number)}
+	ToParse = `54602`
 
-	exp := rule_cb(and, expression, func(args interface{}) interface{} {
-		fmt.Println(literal_num(interfaces_to_str(args)))
-		return literal_num(interfaces_to_str(args))
+	num := rawRule(number)
+	s := rawRule(str)
+
+	dataTypes := []Rule{num, s}
+
+	exp := rule_cb(or, dataTypes, func(args interface{}) interface{} {
+		fmt.Println(args.([]interface{})[0])
+		return interfaces_to_str(args.([]interface{})[0])
 	})
 
-	//toMatch := []Token{token(number, "1", 0, 0), token(number, "7", 1, 1)}
+	final, err := consume(exp)
 
-	final := consume(exp)
-
-	fmt.Println("Final number:", final)
-
-	//fmt.Println("Lexed :", lex("1247854567"))
+	fmt.Println("Final", final.(Literal).valueType, ":", final, err)
 }
