@@ -184,8 +184,12 @@ func main() {
 	dataTypes := []Rule{num, s}
 
 	exp := rule_cb(or, dataTypes, func(args interface{}) interface{} {
-		fmt.Println(args.([]interface{})[0])
-		return interfaces_to_str(args.([]interface{})[0])
+		first := args.([]interface{})[0].(string)[0]
+		if first == '"' || first == '\'' || first == '`' {
+			return literal_str(interfaces_to_str(args))
+		} else {
+			return literal_num(interfaces_to_str(args))
+		}
 	})
 
 	final, err := consume(exp)
