@@ -2,14 +2,22 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
+
+	"github.com/lucasjones/reggen"
 )
 
 const (
 	or       = 0
 	multiple = 1
 	and      = 2
+)
+
+var (
+	filePath string
 )
 
 type Rule struct {
@@ -60,11 +68,11 @@ func literal_num(value string) Literal {
 	return Literal{"Number", "", num}
 }
 
-func crt(ruleset []Rule) (int, bool, []interface{}, string) {
+func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 	breakPoint := 0
 	atLeastMatch := true
 	final := []interface{}{}
-	err := ""
+	var err error
 
 	tk_IDX := 0
 
@@ -73,7 +81,8 @@ func crt(ruleset []Rule) (int, bool, []interface{}, string) {
 		var toCompare Token
 
 		if rule.Raw {
-			_matches, toCompare := compareNext(rule.Type)
+			_matches, _toCompare := compareNext(rule.Type)
+			toCompare = _toCompare
 			matches = _matches
 			fmt.Println("Val :", toCompare.Value, matches)
 			fmt.Println(toCompare)
@@ -82,13 +91,26 @@ func crt(ruleset []Rule) (int, bool, []interface{}, string) {
 			}
 			tk_IDX += 1
 		} else {
-			consume_type(rule.Type, rule)
+			_final, err := consume_type(rule.Type, rule)
+			matches = err == nil
+			fmt.Println("OR MATCH:", matches, err)
+			final = append(final, _final)
 		}
 
 		breakPoint = tk_IDX
 		if !matches {
 			atLeastMatch = false
-			err = fmt.Sprintf("Unexpected token '%s' at column %d, expected : '%s' \n", toCompare.Value, toCompare.start, Tokens[rule.Type])
+			fmt.Println("Error :", toCompare)
+			val := strings.ReplaceAll(toCompare.Value, "\n", "\\n")
+			plural := ""
+
+			if len(val) == 1 {
+				plural = "token"
+			} else {
+				plural = "tokens"
+			}
+			str, _ := reggen.Generate(Matches[rule.Type], 10)
+			err = fmt.Errorf("Unexpected %s '%s' at %s:%d:%d  expected something like: %s", plural, val, filePath, toCompare.start[1], toCompare.start[0], str)
 			fmt.Println("no match")
 			break
 		}
@@ -102,12 +124,14 @@ func crt(ruleset []Rule) (int, bool, []interface{}, string) {
 	return breakPoint, atLeastMatch, final, err
 }
 
-func consume(rootRule Rule) (interface{}, string) {
-	var err string
+func consume(rootRule Rule) (interface{}, error) {
+	var err error
 	if rootRule.Raw {
 
 		_, matches, final, _err := crt(rootRule.Subrules)
-		err = _err
+		if err != nil {
+			err = _err
+		}
 		if matches {
 			return rootRule.Callback(final), err
 		} else {
@@ -119,46 +143,54 @@ func consume(rootRule Rule) (interface{}, string) {
 	}
 }
 
-func consume_type(_type int, rootRule Rule) (interface{}, string) {
-	var err string
+func consume_type(_type int, rootRule Rule) (interface{}, error) {
+	var err error
 	switch _type {
 	case multiple:
 		x := 0
 		running := true
 		final := []interface{}{}
 
+		var tempErr error
 		for running {
-			bp, matches, _final, _err := crt(rootRule.Subrules)
+			_, matches, _final, _err := crt(rootRule.Subrules)
 			final = append(final, _final...)
 			running = matches
-			x += bp
-			err = _err
+			tempErr = _err
+			if !matches {
+				break
+			}
+			x += 1
+		}
+
+		if x == 0 {
+			err = tempErr
 		}
 		return rootRule.Callback(final), err
 	case or:
 		match := false
 		final := []interface{}{}
-		tempErr := ""
+		var tempErr error
 
 		for _, rule := range rootRule.Subrules {
 			_, matches, _final, _err := crt([]Rule{rule})
-			fmt.Println("Rule :", rule, "Match", matches)
 			match = matches
 			tempErr = _err
 			if match {
 				final = append(final, _final...)
+				return rootRule.Callback(final), err
 				break
 			}
 		}
 		if !match {
 			err = tempErr
+		} else {
 		}
-		return rootRule.Callback(final), err
-		break
 	case and:
 		_, _, final, err := crt(rootRule.Subrules)
-		return rootRule.Callback(final), err
-		break
+		if err == nil {
+			return rootRule.Callback(final), err
+		}
 	}
 	return "", err
 }
@@ -176,15 +208,22 @@ func interfaces_to_str(i interface{}) string {
 func main() {
 	initMap()
 
-	ToParse = `54602`
+	filePath = "./code.js"
+	body, err := ioutil.ReadFile("./code.js")
+	if err != nil {
+		log.Fatalf("unable to read file: %v", err)
+	}
 
-	num := rawRule(number)
+	ToParse = string(body)
+
 	s := rawRule(str)
+	num := rawRule(number)
 
 	dataTypes := []Rule{num, s}
 
-	exp := rule_cb(or, dataTypes, func(args interface{}) interface{} {
+	expression := rule_cb(or, dataTypes, func(args interface{}) interface{} {
 		first := args.([]interface{})[0].(string)[0]
+		fmt.Println("First : ", args)
 		if first == '"' || first == '\'' || first == '`' {
 			return literal_str(interfaces_to_str(args))
 		} else {
@@ -192,7 +231,23 @@ func main() {
 		}
 	})
 
-	final, err := consume(exp)
+	assignementStructure := []Rule{rawRule(var_var), rawRule(equals), expression}
 
-	fmt.Println("Final", final.(Literal).valueType, ":", final, err)
+	assignement := rule_cb(and, assignementStructure, func(args interface{}) interface{} {
+		return "Assignement"
+	})
+
+	instructions := []Rule{expression, assignement}
+
+	instruction := rule_cb(multiple, instructions, func(args interface{}) interface{} {
+		return args
+	})
+
+	final, err := consume(instruction)
+
+	if err != nil {
+		log.Fatalln(err)
+	} else {
+		fmt.Println("Final :", final)
+	}
 }
