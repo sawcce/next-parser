@@ -16,14 +16,17 @@ const (
 	number = 10
 	str    = 11
 
+	// Data Types
+	identifier = 30
+
 	// Variables
-	const_var = 20
-	let_var   = 21
-	var_var   = 22
+	const_var = 40
+	let_var   = 41
+	var_var   = 42
 
 	//
-	eof           = 100
-	notRecognized = 150
+	eof           = 1000
+	notRecognized = 1050
 )
 
 var (
@@ -50,6 +53,8 @@ func initMap() {
 	Matches[const_var] = "const"
 	Matches[let_var] = "let"
 	Matches[var_var] = "var"
+
+	Matches[identifier] = `([a-zA-Z])+`
 
 	// STRING REPS
 

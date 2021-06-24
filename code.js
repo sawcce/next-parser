@@ -4,4 +4,4 @@
 
   "hsdf"
 
-  var = 21
+  const qsd = 21

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strconv"
 	"strings"
 
 	"github.com/lucasjones/reggen"
@@ -43,6 +42,10 @@ func rule_cb(_type int, rules []Rule, callback func(interface{}) interface{}) Ru
 	return Rule{false, _type, rules, callback}
 }
 
+func or_rules(rules []Rule) Rule {
+	return Rule{false, or, rules, func(args interface{}) interface{} { return args.([]interface{})[0] }}
+}
+
 func tokens_to_strings(tokens []Token) string {
 	res := ""
 
@@ -51,21 +54,6 @@ func tokens_to_strings(tokens []Token) string {
 	}
 
 	return res
-}
-
-type Literal struct {
-	valueType string
-	raw       string
-	value     interface{}
-}
-
-func literal_str(value string) Literal {
-	return Literal{"string", value, 0}
-}
-
-func literal_num(value string) Literal {
-	num, _ := strconv.ParseFloat(value, 64)
-	return Literal{"Number", "", num}
 }
 
 func crt(ruleset []Rule) (int, bool, []interface{}, error) {
@@ -84,7 +72,6 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 			_matches, _toCompare := compareNext(rule.Type)
 			toCompare = _toCompare
 			matches = _matches
-			fmt.Println("Val :", toCompare.Value, matches)
 			fmt.Println(toCompare)
 			if matches {
 				final = append(final, toCompare.Value)
@@ -93,14 +80,12 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 		} else {
 			_final, err := consume_type(rule.Type, rule)
 			matches = err == nil
-			fmt.Println("OR MATCH:", matches, err)
 			final = append(final, _final)
 		}
 
 		breakPoint = tk_IDX
 		if !matches {
 			atLeastMatch = false
-			fmt.Println("Error :", toCompare)
 			val := strings.ReplaceAll(toCompare.Value, "\n", "\\n")
 			plural := ""
 
@@ -231,10 +216,12 @@ func main() {
 		}
 	})
 
-	assignementStructure := []Rule{rawRule(var_var), rawRule(equals), expression}
+	assignementStructure := []Rule{or_rules([]Rule{rawRule(var_var), rawRule(let_var), rawRule(const_var)}), rawRule(identifier), rawRule(equals), expression}
 
 	assignement := rule_cb(and, assignementStructure, func(args interface{}) interface{} {
-		return "Assignement"
+		params := args.([]interface{})
+		fmt.Println("Assignement :", params, params[1].(string))
+		return var_declaration(params[1].(string), params[0].(string), params[3])
 	})
 
 	instructions := []Rule{expression, assignement}
