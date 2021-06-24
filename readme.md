@@ -16,11 +16,9 @@ This will allow better performance as well as more readability in general.
 
 ## Logic
 
-The parser will be divided into two categories : 
-- The ast-builder
-- The lexer
+The parser utilizes a combo of a parser and a tokenizer:
 
-The lexer transforms a string into a list of tokens  and the ast-builder will take these tokens and transform them into a list of instructions 
+Instead of tokenizing then parsing, the parser will ask the lexer to check the regexp for the next token and return a bool on whether it matches or not.
 
 Right now how I've been working on it, I plan on making the project "rule based" 
 
