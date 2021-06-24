@@ -72,7 +72,6 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 			_matches, _toCompare := compareNext(rule.Type)
 			toCompare = _toCompare
 			matches = _matches
-			fmt.Println(toCompare)
 			if matches {
 				final = append(final, toCompare.Value)
 			}
@@ -96,7 +95,6 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 			}
 			str, _ := reggen.Generate(Matches[rule.Type], 10)
 			err = fmt.Errorf("Unexpected %s '%s' at %s:%d:%d  expected something like: %s", plural, val, filePath, toCompare.start[1], toCompare.start[0], str)
-			fmt.Println("no match")
 			break
 		}
 	}
@@ -208,7 +206,6 @@ func main() {
 
 	expression := rule_cb(or, dataTypes, func(args interface{}) interface{} {
 		first := args.([]interface{})[0].(string)[0]
-		fmt.Println("First : ", args)
 		if first == '"' || first == '\'' || first == '`' {
 			return literal_str(interfaces_to_str(args))
 		} else {

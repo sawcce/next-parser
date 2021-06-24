@@ -103,10 +103,7 @@ func compareNext(expected int) (bool, Token) {
 	r, _ := regexp.Compile(Matches[expected])
 	l := r.FindSubmatchIndex([]byte(s))
 
-	fmt.Println("Testing for:", Tokens[expected], currentIndex, s)
-
 	if len(l) == 0 {
-		fmt.Println("NO MATCH")
 		return false, TK(eof)
 	}
 
