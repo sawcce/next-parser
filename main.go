@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/lucasjones/reggen"
 )
@@ -26,8 +27,8 @@ type Rule struct {
 	Callback func(interface{}) interface{}
 }
 
-func def(interface{}) interface{} {
-	return ""
+func def(args interface{}) interface{} {
+	return args.([]interface{})[0]
 }
 
 func rawRule(_type int) Rule {
@@ -40,6 +41,10 @@ func rule(_type int, rules []Rule) Rule {
 
 func rule_cb(_type int, rules []Rule, callback func(interface{}) interface{}) Rule {
 	return Rule{false, _type, rules, callback}
+}
+
+func multiple_rule(rules []Rule) Rule {
+	return Rule{false, multiple, rules, func(args interface{}) interface{} { return args.([]interface{})[0] }}
 }
 
 func or_rules(rules []Rule) Rule {
@@ -72,6 +77,7 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 			_matches, _toCompare := compareNext(rule.Type)
 			toCompare = _toCompare
 			matches = _matches
+			atLeastMatch = _matches
 			if matches {
 				final = append(final, toCompare.Value)
 			}
@@ -79,6 +85,7 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 		} else {
 			_final, err := consume_type(rule.Type, rule)
 			matches = err == nil
+			atLeastMatch = err == nil
 			final = append(final, _final)
 		}
 
@@ -88,13 +95,15 @@ func crt(ruleset []Rule) (int, bool, []interface{}, error) {
 			val := strings.ReplaceAll(toCompare.Value, "\n", "\\n")
 			plural := ""
 
-			if len(val) == 1 {
+			if len(val) <= 1 {
 				plural = "token"
 			} else {
 				plural = "tokens"
 			}
+
 			str, _ := reggen.Generate(Matches[rule.Type], 10)
 			err = fmt.Errorf("Unexpected %s '%s' at %s:%d:%d  expected something like: %s", plural, val, filePath, toCompare.start[1], toCompare.start[0], str)
+
 			break
 		}
 	}
@@ -121,7 +130,9 @@ func consume(rootRule Rule) (interface{}, error) {
 			return "", err
 		}
 	} else {
+		fmt.Println("CONSUME")
 		final, _err := consume_type(rootRule.Type, rootRule)
+		fmt.Println("END CONSUME", _err)
 		return final, _err
 	}
 }
@@ -137,17 +148,17 @@ func consume_type(_type int, rootRule Rule) (interface{}, error) {
 		var tempErr error
 		for running {
 			_, matches, _final, _err := crt(rootRule.Subrules)
+			fmt.Println("Running", matches, currentIndex, final)
 			final = append(final, _final...)
 			running = matches
 			tempErr = _err
 			if !matches {
-				break
+				if x == 0 {
+					err = tempErr
+					return final, err
+				}
 			}
 			x += 1
-		}
-
-		if x == 0 {
-			err = tempErr
 		}
 		return rootRule.Callback(final), err
 	case or:
@@ -165,14 +176,14 @@ func consume_type(_type int, rootRule Rule) (interface{}, error) {
 				break
 			}
 		}
-		if !match {
-			err = tempErr
-		} else {
-		}
+		err = tempErr
+		return "", tempErr
 	case and:
 		_, _, final, err := crt(rootRule.Subrules)
 		if err == nil {
 			return rootRule.Callback(final), err
+		} else {
+			return "", err
 		}
 	}
 	return "", err
@@ -191,6 +202,8 @@ func interfaces_to_str(i interface{}) string {
 func main() {
 	initMap()
 
+	start := time.Now()
+
 	filePath = "./code.js"
 	body, err := ioutil.ReadFile("./code.js")
 	if err != nil {
@@ -202,18 +215,21 @@ func main() {
 	s := rawRule(str)
 	num := rawRule(number)
 
-	dataTypes := []Rule{num, s}
-
-	expression := rule_cb(or, dataTypes, func(args interface{}) interface{} {
-		first := args.([]interface{})[0].(string)[0]
-		if first == '"' || first == '\'' || first == '`' {
-			return literal_str(interfaces_to_str(args))
-		} else {
-			return literal_num(interfaces_to_str(args))
-		}
+	stringRule := rule_cb(and, []Rule{s}, func(args interface{}) interface{} {
+		return literal_str(interfaces_to_str(args))
 	})
 
-	assignementStructure := []Rule{or_rules([]Rule{rawRule(var_var), rawRule(let_var), rawRule(const_var)}), rawRule(identifier), rawRule(equals), expression}
+	numRule := rule_cb(and, []Rule{num}, func(args interface{}) interface{} {
+		return literal_num(interfaces_to_str(args))
+	})
+
+	//fp := rule(multiple, []Rule{rawRule(identifier), rawRule(dot)})
+	//sp := rule(and, []Rule{fp, rawRule(identifier)})
+	//accessor := or_rules([]Rule{rawRule(identifier)})
+
+	expressions := rule(or, []Rule{stringRule, numRule, rawRule(identifier)})
+
+	assignementStructure := []Rule{rawRule(const_var), rawRule(identifier), rawRule(equals), expressions}
 
 	assignement := rule_cb(and, assignementStructure, func(args interface{}) interface{} {
 		params := args.([]interface{})
@@ -221,17 +237,25 @@ func main() {
 		return var_declaration(params[1].(string), params[0].(string), params[3])
 	})
 
-	instructions := []Rule{expression, assignement}
+	instructions := []Rule{assignement}
 
-	instruction := rule_cb(multiple, instructions, func(args interface{}) interface{} {
+	instruction := rule_cb(and, instructions, func(args interface{}) interface{} {
 		return args
 	})
 
-	final, err := consume(instruction)
+	program := rule_cb(multiple, []Rule{instruction}, func(args interface{}) interface{} {
+		return args
+	})
+
+	final, err := consume(program)
 
 	if err != nil {
 		log.Fatalln(err)
 	} else {
-		fmt.Println("Final :", final)
+		//d, _ := json.Marshal(final)
+		fmt.Println("fn :", final)
 	}
+
+	elapsed := time.Since(start)
+	log.Printf("Reading, Parsing / Lexing took %s", elapsed)
 }

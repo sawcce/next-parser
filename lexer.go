@@ -137,23 +137,3 @@ func test(str string, reg string, opts ...string) (string, bool) {
 
 	return "", true
 }
-
-/*func lex(s string) Token {
-	for i, str := range s {
-		fmt.Println("Rune:", i, string(str), string('1'))
-		switch str {
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			num, _ := test(s[i:], "\\d*\\.?\\d*", "Number")
-			fmt.Println("Number :", num)
-			i += len(num)
-			return token(number, num, i, len(s))
-		case '(':
-			return token(lparen, string(str), i, i)
-		case ')':
-			return token(rparen, string(str), i, i)
-		default:
-			return TK(notRecognized)
-		}
-	}
-	return TK(eof)
-}*/
