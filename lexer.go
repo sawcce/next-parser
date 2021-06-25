@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/lucasjones/reggen"
 )
 
 const (
@@ -25,13 +27,14 @@ const (
 	var_var   = 42
 
 	//
-	eof           = 1000
-	notRecognized = 1050
+	eof       = 1000
+	unmatched = 1050
 )
 
 var (
-	ToParse      = ""
-	currentIndex = 0 // Current of the lexer
+	ToParse         = ""
+	currentIndex    = 0 // Current of the lexer
+	rememberedIndex = 0 // Used on set / pop
 )
 
 var (
@@ -98,13 +101,27 @@ func countNothing(str string) int {
 	return len(m)
 }
 
-func compareNext(expected int) (bool, Token) {
+func generateExample(_type int) string {
+	str, _ := reggen.Generate(Matches[_type], 10)
+	return str
+}
+
+func setState() {
+	rememberedIndex = currentIndex
+}
+
+func popState() {
+	currentIndex = rememberedIndex
+}
+
+func compareNext(expected int) (Token, error) {
+	var err error
 	s := ToParse[currentIndex:]
 	r, _ := regexp.Compile(Matches[expected])
 	l := r.FindSubmatchIndex([]byte(s))
 
 	if len(l) == 0 {
-		return false, TK(eof)
+		return token(unmatched, s[currentIndex:currentIndex+1], [2]int{0, 0}, [2]int{0, 0}), fmt.Errorf("%s", generateExample(expected))
 	}
 
 	none, _ := regexp.Compile(`\S`)
@@ -120,10 +137,10 @@ func compareNext(expected int) (bool, Token) {
 		endCol := currentIndex + l[1] + 0
 		endPos := [2]int{endCol, countLines(ToParse[:endCol])}
 		currentIndex += l[1]
-		return true, token(expected, match, startPos, endPos)
+		return token(expected, match, startPos, endPos), err
 	} else {
 		startPos[0] -= 1
-		return false, token(eof, s[:l[0]], startPos, startPos)
+		return token(unmatched, s[:l[0]], startPos, startPos), fmt.Errorf("")
 	}
 }
 

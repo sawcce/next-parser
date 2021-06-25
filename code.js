@@ -1,1 +1,1 @@
-const x = 0
+const 0 = 0
